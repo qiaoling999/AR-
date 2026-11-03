@@ -1,0 +1,236 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>AR 互動學習</title>
+
+  <!-- 3D 與真實空間 AR -->
+  <script type="module"
+    src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js">
+  </script>
+
+  <!-- 專屬圖片辨識 AR -->
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #eef7fa;
+      color: #163c53;
+    }
+    #spacePage {
+      display: none;
+      padding: 20px;
+      text-align: center;
+    }
+    h2 { margin: 8px 0 12px; }
+    model-viewer {
+      display: block;
+      width: 100%;
+      height: 65vh;
+      background: #d9edf3;
+      border-radius: 16px;
+    }
+    .arButton, #startCard {
+      border: none;
+      padding: 15px 24px;
+      border-radius: 12px;
+      background: #087fa9;
+      color: white;
+      font-weight: bold;
+      font-size: 17px;
+      cursor: pointer;
+    }
+    .arButton {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+    #cardIntro {
+      display: none;
+      padding: 35px 22px;
+      text-align: center;
+    }
+    #cardScene {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: black;
+    }
+    #status {
+      position: fixed;
+      top: 16px;
+      left: 5%;
+      width: 90%;
+      padding: 12px;
+      text-align: center;
+      color: white;
+      background: #000a;
+      border-radius: 10px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    #error {
+      color: #b42318;
+      padding: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 模式一：空間 AR -->
+  <div id="spacePage">
+    <h2>真實空間 AR</h2>
+    <p>旋轉模型，或將它放置到真實環境</p>
+
+    <model-viewer
+      id="viewer"
+      src="./model.glb"
+      alt="互動式 3D 學習模型"
+      camera-controls
+      auto-rotate
+      shadow-intensity="1"
+      exposure="1"
+      ar
+      ar-modes="scene-viewer webxr quick-look"
+      ar-placement="floor"
+      ar-scale="auto">
+
+      <button class="arButton" slot="ar-button">
+        在真實空間中觀看
+      </button>
+    </model-viewer>
+
+    <p>使用兩指縮放，單指旋轉模型。</p>
+    <p>支援 AR 的手機可按下按鈕進入實景。</p>
+  </div>
+
+  <!-- 模式二：圖卡 AR 啟動畫面 -->
+  <div id="cardIntro">
+    <h2>專屬圖卡 AR</h2>
+    <p>準備好你的 AR 圖卡</p>
+    <p>點擊下方按鈕並允許使用相機。</p>
+    <button id="startCard">啟動相機辨識</button>
+    <div id="error"></div>
+  </div>
+
+  <!-- 模式二：AR 攝影機 -->
+  <div id="cardScene">
+    <div id="status">
+      請將相機對準專屬 AR 圖卡
+    </div>
+
+    <a-scene
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: yes; uiScanning: no;"
+      embedded
+      color-space="sRGB"
+      renderer="colorManagement: true; antialias: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false">
+
+      <a-assets timeout="30000">
+        <a-asset-item
+          id="modelAsset"
+          src="./model.glb">
+        </a-asset-item>
+      </a-assets>
+
+      <a-camera
+        position="0 0 0"
+        look-controls="enabled: false">
+      </a-camera>
+
+      <a-entity
+        id="imageTarget"
+        mindar-image-target="targetIndex: 0">
+
+        <a-gltf-model
+          id="cardModel"
+          src="#modelAsset"
+          position="0 0 0.15"
+          rotation="0 0 0"
+          scale="0.3 0.3 0.3">
+        </a-gltf-model>
+
+      </a-entity>
+    </a-scene>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const mode = params.get("mode") || "space";
+
+    if (mode === "card") {
+      document.getElementById("cardIntro").style.display =
+        "block";
+    } else {
+      document.getElementById("spacePage").style.display =
+        "block";
+    }
+
+    const startButton = document.getElementById("startCard");
+
+    startButton.addEventListener("click", async () => {
+      const intro = document.getElementById("cardIntro");
+      const sceneBox = document.getElementById("cardScene");
+      const scene = document.querySelector("a-scene");
+      const errorBox = document.getElementById("error");
+
+      startButton.disabled = true;
+      errorBox.textContent = "";
+
+      try {
+        if (!navigator.mediaDevices) {
+          throw new Error("此瀏覽器無法使用相機 API");
+        }
+
+        if (!scene.hasLoaded) {
+          await new Promise(resolve => {
+            scene.addEventListener("loaded", resolve, {
+              once: true
+            });
+          });
+        }
+
+        const arSystem = scene.systems["mindar-image-system"];
+
+        if (!arSystem) {
+          throw new Error("圖卡辨識系統載入失敗");
+        }
+
+        sceneBox.style.display = "block";
+        intro.style.display = "none";
+
+        await arSystem.start();
+
+      } catch (err) {
+        sceneBox.style.display = "none";
+        intro.style.display = "block";
+        startButton.disabled = false;
+        errorBox.textContent =
+          "無法啟動 AR：" + err.message;
+      }
+    });
+
+    const target = document.getElementById("imageTarget");
+
+    target.addEventListener("targetFound", () => {
+      document.getElementById("status").textContent =
+        "辨識成功！移動圖卡觀察模型";
+    });
+
+    target.addEventListener("targetLost", () => {
+      document.getElementById("status").textContent =
+        "圖卡離開畫面，請重新對準";
+    });
+  </script>
+</body>
+</html>
